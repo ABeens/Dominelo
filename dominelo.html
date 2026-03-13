@@ -353,12 +353,6 @@
     </div>
     <button class="btn-reset" id="btnReset" style="display:none">Resetear todo</button>
 
-    <!-- Google Sheets Sync -->
-    <div class="sync-row">
-      <button class="btn-sync" id="btnSyncUp" title="Subir datos a Google Sheets">⬆ Subir a Sheets</button>
-      <button class="btn-sync" id="btnSyncDown" title="Descargar datos de Google Sheets">⬇ Cargar de Sheets</button>
-    </div>
-    <div class="sync-status" id="syncStatus"></div>
   </div>
 
   <!-- MATCH -->
@@ -662,7 +656,6 @@ function renderRanking() {
 
   resetBtn.style.display = isAdmin() ? 'block' : 'none';
   document.querySelector('.add-row').style.display = isAdmin() ? 'flex' : 'none';
-  document.querySelector('.sync-row').style.display = isAdmin() ? 'flex' : 'none';
   list.innerHTML = sorted.map((p, i) => {
     const isTop = i === 0;
     const badge = rankBadge(i);
@@ -988,9 +981,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Reset
   document.getElementById('btnReset').addEventListener('click', resetAll);
 
-  // Sync buttons
-  document.getElementById('btnSyncUp').addEventListener('click', syncToSheets);
-  document.getElementById('btnSyncDown').addEventListener('click', syncFromSheets);
 });
 </script>
 
