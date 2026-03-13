@@ -644,7 +644,15 @@ function render() {
 }
 
 function renderRanking() {
-  const sorted = [...players].sort((a, b) => b.elo - a.elo);
+  const sorted = [...players].sort((a, b) => {
+    if (b.elo !== a.elo) return b.elo - a.elo;
+    const aTotal = a.wins + a.losses;
+    const bTotal = b.wins + b.losses;
+    const aAvg = aTotal > 0 ? a.wins / aTotal : 0;
+    const bAvg = bTotal > 0 ? b.wins / bTotal : 0;
+    if (bAvg !== aAvg) return bAvg - aAvg;
+    return (b.efectividad || 0) - (a.efectividad || 0);
+  });
   const list = document.getElementById('playerList');
   const resetBtn = document.getElementById('btnReset');
 
