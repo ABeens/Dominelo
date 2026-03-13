@@ -557,6 +557,7 @@ function addPlayer() {
   input.value = '';
   save();
   render();
+  autoSync();
 }
 
 function removePlayer(id) {
@@ -566,6 +567,7 @@ function removePlayer(id) {
   team2 = team2.map(v => v === id ? null : v);
   save();
   render();
+  autoSync();
 }
 
 function recordMatch() {
@@ -625,6 +627,7 @@ function recordMatch() {
   team2 = [null, null];
   save();
   render();
+  autoSync();
 }
 
 function resetAll() {
@@ -858,6 +861,35 @@ function setSyncStatus(msg, type) {
   if (type) setTimeout(() => { el.textContent = ''; el.className = 'sync-status'; }, 5000);
 }
 
+async function autoSync() {
+  if (!APPS_SCRIPT_URL) return;
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sync', players, matches })
+    });
+  } catch (err) {
+    console.error('Auto-sync failed', err);
+  }
+}
+
+async function autoLoad() {
+  if (!APPS_SCRIPT_URL) return;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL);
+    const json = await res.json();
+    if (json.success && json.players && json.players.length > 0) {
+      players = json.players;
+      matches = json.matches || [];
+      save();
+      render();
+    }
+  } catch (err) {
+    console.log('Auto-load failed, using local data');
+  }
+}
+
 async function syncToSheets() {
   if (!APPS_SCRIPT_URL) {
     setSyncStatus('Configura APPS_SCRIPT_URL en el código', 'err');
@@ -933,6 +965,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   load();
   render();
+  autoLoad();
 
   // Tabs
   document.querySelectorAll('.tab-btn').forEach(btn => {
