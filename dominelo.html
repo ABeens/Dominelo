@@ -582,8 +582,8 @@ function recordMatch() {
   const winnerTeam = s1 > s2 ? 1 : 2;
   const winnerScore = Math.max(s1, s2);
   const loserScore = Math.min(s1, s2);
-  const winEfectividad = winnerScore - loserScore;
-  const loseEfectividad = loserScore - winnerScore;
+  const winEfectividad = 200 - loserScore;
+  const loseEfectividad = loserScore - 200;
 
   const t1Avg = (getElo(team1[0]) + getElo(team1[1])) / 2;
   const t2Avg = (getElo(team2[0]) + getElo(team2[1])) / 2;
