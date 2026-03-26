@@ -48,7 +48,14 @@
   }
 
   /* Header */
-  .header { text-align: center; margin-bottom: 32px; padding-top: 12px; }
+  .header { text-align: center; margin-bottom: 32px; padding-top: 12px; position: relative; }
+  .btn-logout {
+    position: absolute; top: 12px; right: 0;
+    background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted);
+    font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+    font-family: var(--font-mono); letter-spacing: 1px; transition: all .2s;
+  }
+  .btn-logout:hover { border-color: var(--gold); color: var(--gold); }
   .header h1 {
     font-size: 38px; letter-spacing: 6px; font-weight: 700;
     color: #f5e6c8; text-transform: uppercase;
@@ -348,6 +355,7 @@
   <div class="header">
     <h1>🁣 Dominelo</h1>
     <div class="sub">RATING POR PAREJAS</div>
+    <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
   </div>
 
   <!-- Tabs -->
@@ -433,6 +441,12 @@ function doLogin() {
   } else {
     document.getElementById('loginError').textContent = 'Usuario o contraseña incorrectos';
   }
+}
+
+function doLogout() {
+  localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(ROLE_KEY);
+  location.reload();
 }
 
 // ═══════════════════════════════════════
@@ -999,6 +1013,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (checkAuth()) {
     document.getElementById('loginOverlay').classList.add('hidden');
   }
+  document.getElementById('btnLogout').addEventListener('click', doLogout);
   document.getElementById('btnLogin').addEventListener('click', doLogin);
   document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
