@@ -412,7 +412,8 @@ const AUTH_USERS = {
   'reynaldo': { pass: 'Tranca9', role: 'admin' },
   'ronald':   { pass: 'Pase4x',  role: 'admin' },
   'alejandro': { pass: 'Mesa3aL', role: 'viewer' },
-  'ronaldferreiro': { pass: 'Ficha8rF', role: 'viewer' }
+  'ronaldferreiro': { pass: 'Ficha8rF', role: 'viewer' },
+  'josem':          { pass: 'Domino5j', role: 'admin' }
 };
 const AUTH_KEY = 'domino-elo-auth';
 const ROLE_KEY = 'domino-elo-role';
@@ -688,9 +689,12 @@ function render() {
 
 function renderRanking() {
   const sorted = [...players].sort((a, b) => {
-    if (b.elo !== a.elo) return b.elo - a.elo;
     const aTotal = a.wins + a.losses;
     const bTotal = b.wins + b.losses;
+    const aPlayed = aTotal > 0 ? 1 : 0;
+    const bPlayed = bTotal > 0 ? 1 : 0;
+    if (bPlayed !== aPlayed) return bPlayed - aPlayed;
+    if (b.elo !== a.elo) return b.elo - a.elo;
     const aAvg = aTotal > 0 ? a.wins / aTotal : 0;
     const bAvg = bTotal > 0 ? b.wins / bTotal : 0;
     if (bAvg !== aAvg) return bAvg - aAvg;
@@ -708,7 +712,8 @@ function renderRanking() {
     const isTop = i === 0;
     const badge = rankBadge(i);
     const total = p.wins + p.losses;
-    const pct = total > 0 ? Math.round(p.wins / total * 100) + '%' : '-';
+    const hasGames = total > 0;
+    const pct = hasGames ? Math.round(p.wins / total * 100) + '%' : '-';
     const ef = p.efectividad || 0;
     const efStr = ef >= 0 ? '+' + ef : '' + ef;
     let seriesHTML = '';
@@ -747,10 +752,10 @@ function renderRanking() {
         <span class="rank ${i < 3 ? 'badge' : 'num'}">${badge}</span>
         <div class="player-info">
           <div class="player-name">${esc(p.name)}</div>
-          <div class="player-stats">${p.wins}W · ${p.losses}L · Avg: ${pct}</div>
-          <div class="player-stats">PF:${p.ptsFor||0} · PA:${p.ptsAgainst||0} · <span style="color:${ef >= 0 ? 'var(--green)' : 'var(--red)'}">${efStr}</span></div>
+          <div class="player-stats">${hasGames ? `${p.wins}W · ${p.losses}L · Avg: ${pct}` : '—W · —L · Avg: —'}</div>
+          <div class="player-stats">${hasGames ? `PF:${p.ptsFor||0} · PA:${p.ptsAgainst||0} · <span style="color:${ef >= 0 ? 'var(--green)' : 'var(--red)'}">${efStr}</span>` : 'PF:— · PA:— · —'}</div>
         </div>
-        <div class="player-elo ${p.elo >= INITIAL_ELO ? 'high' : 'low'}">${p.elo}</div>
+        <div class="player-elo ${!hasGames ? '' : p.elo >= INITIAL_ELO ? 'high' : 'low'}">${hasGames ? p.elo : '—'}</div>
         ${isAdmin() ? `<button class="btn-remove" onclick="event.stopPropagation();removePlayer('${p.id}')" title="Eliminar">✕</button>` : ''}
       </div>${seriesHTML}`;
   }).join('');
