@@ -326,6 +326,54 @@
     font-size: 12px; color: var(--red); font-family: var(--font-mono);
     min-height: 18px; margin-bottom: 8px;
   }
+
+  /* Match actions (edit/delete) */
+  .match-actions {
+    display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .btn-match-edit, .btn-match-delete {
+    padding: 5px 12px; font-size: 11px; border-radius: 6px;
+    font-family: var(--font-mono); cursor: pointer; letter-spacing: 1px;
+    background: transparent; transition: all .2s;
+  }
+  .btn-match-edit {
+    color: var(--gold); border: 1px solid rgba(201,168,76,0.3);
+  }
+  .btn-match-edit:hover { background: rgba(201,168,76,0.1); }
+  .btn-match-delete {
+    color: var(--red); border: 1px solid rgba(160,80,80,0.3);
+  }
+  .btn-match-delete:hover { background: rgba(160,80,80,0.1); }
+
+  /* Edit match modal */
+  .edit-overlay {
+    position: fixed; inset: 0; z-index: 150;
+    background: rgba(10,15,26,0.9);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .edit-overlay.hidden { display: none; }
+  .edit-modal {
+    width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+    padding: 24px; border-radius: 16px;
+    background: var(--bg-mid); border: 1px solid var(--border-light);
+  }
+  .edit-modal h3 {
+    color: var(--gold); font-size: 20px; letter-spacing: 2px;
+    margin-bottom: 16px; text-align: center; font-weight: 600;
+  }
+  .edit-modal .edit-note {
+    font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+    text-align: center; margin-bottom: 14px;
+  }
+  .edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn-edit-save, .btn-edit-cancel {
+    flex: 1; padding: 12px 0; font-size: 14px; font-weight: 700; border-radius: 10px;
+    border: none; font-family: var(--font-display); letter-spacing: 1px; cursor: pointer;
+  }
+  .btn-edit-save { background: var(--green-bg); color: #c8f0c8; }
+  .btn-edit-cancel { background: #1a1a2e; color: var(--text-dim); border: 1px solid var(--border-light); }
 </style>
 </head>
 <body>
@@ -340,6 +388,11 @@
     <div class="login-error" id="loginError"></div>
     <button class="btn-gold" style="width:100%" id="btnLogin">Entrar</button>
   </div>
+</div>
+
+<!-- Edit match modal -->
+<div class="edit-overlay hidden" id="editOverlay">
+  <div class="edit-modal" id="editModalBody"></div>
 </div>
 
 <!-- Loader -->
@@ -677,6 +730,216 @@ function resetAll() {
 }
 
 // ═══════════════════════════════════════
+// RECALC / EDIT / DELETE MATCHES
+// ═══════════════════════════════════════
+function recalculateAll() {
+  // Reset player stats (preserve id/name)
+  players = players.map(p => ({
+    ...p,
+    elo: INITIAL_ELO,
+    wins: 0,
+    losses: 0,
+    ptsFor: 0,
+    ptsAgainst: 0,
+    efectividad: 0
+  }));
+
+  // Replay matches oldest → newest (ids are Date.now() strings)
+  const chrono = [...matches].sort((a, b) => Number(a.id) - Number(b.id));
+
+  chrono.forEach(m => {
+    const winners = (m.winnerNames || []).map(n => players.find(p => p.name === n));
+    const losers = (m.loserNames || []).map(n => players.find(p => p.name === n));
+    if (winners.length !== 2 || winners.some(p => !p)) return;
+    if (losers.length !== 2 || losers.some(p => !p)) return;
+
+    const winnerAvg = (winners[0].elo + winners[1].elo) / 2;
+    const loserAvg = (losers[0].elo + losers[1].elo) / 2;
+    const winChange = teamEloChange(winnerAvg, loserAvg, true);
+    const loseChange = teamEloChange(loserAvg, winnerAvg, false);
+
+    const winnerScore = m.winnerScore || 0;
+    const loserScore = m.loserScore || 0;
+    const winEfectividad = 200 - loserScore;
+    const loseEfectividad = loserScore - 200;
+
+    const winnerIds = winners.map(p => p.id);
+    const loserIds = losers.map(p => p.id);
+
+    players = players.map(p => {
+      if (winnerIds.includes(p.id)) return {
+        ...p, elo: p.elo + winChange, wins: p.wins + 1,
+        ptsFor: (p.ptsFor || 0) + winnerScore,
+        ptsAgainst: (p.ptsAgainst || 0) + loserScore,
+        efectividad: (p.efectividad || 0) + winEfectividad
+      };
+      if (loserIds.includes(p.id)) return {
+        ...p, elo: p.elo + loseChange, losses: p.losses + 1,
+        ptsFor: (p.ptsFor || 0) + loserScore,
+        ptsAgainst: (p.ptsAgainst || 0) + winnerScore,
+        efectividad: (p.efectividad || 0) + loseEfectividad
+      };
+      return p;
+    });
+
+    // Update stored match with recomputed deltas/averages
+    m.winChange = winChange;
+    m.loseChange = loseChange;
+    m.winnerAvg = winnerAvg;
+    m.loserAvg = loserAvg;
+  });
+}
+
+function deleteMatch(id) {
+  if (!isAdmin()) return;
+  if (!confirm('¿Eliminar esta partida?\nSe recalcularán los ELO y estadísticas de todos los jugadores.')) return;
+  matches = matches.filter(m => m.id !== id);
+  recalculateAll();
+  save();
+  render();
+  autoSync();
+}
+
+// Edit state
+let editingMatchId = null;
+let editTeam1 = [null, null];
+let editTeam2 = [null, null];
+let editS1 = 0;
+let editS2 = 0;
+
+function openEditMatch(id) {
+  if (!isAdmin()) return;
+  const m = matches.find(x => x.id === id);
+  if (!m) return;
+  editingMatchId = id;
+
+  // Put winners in Team 1, losers in Team 2 initially
+  const nameToId = name => players.find(p => p.name === name)?.id || null;
+  editTeam1 = [nameToId(m.winnerNames?.[0]), nameToId(m.winnerNames?.[1])];
+  editTeam2 = [nameToId(m.loserNames?.[0]), nameToId(m.loserNames?.[1])];
+  editS1 = m.winnerScore || 0;
+  editS2 = m.loserScore || 0;
+
+  renderEditModal();
+}
+
+function closeEditMatch() {
+  editingMatchId = null;
+  document.getElementById('editOverlay').classList.add('hidden');
+}
+
+function captureEditScores() {
+  const s1 = document.getElementById('editScoreT1');
+  const s2 = document.getElementById('editScoreT2');
+  if (s1) editS1 = parseInt(s1.value) || 0;
+  if (s2) editS2 = parseInt(s2.value) || 0;
+}
+
+function setEditSlot(teamNum, slot, value) {
+  captureEditScores();
+  const team = teamNum === 1 ? editTeam1 : editTeam2;
+  team[slot] = value || null;
+  renderEditModal();
+}
+
+function availableForEdit(teamNum, slot) {
+  const team = teamNum === 1 ? editTeam1 : editTeam2;
+  const other = teamNum === 1 ? editTeam2 : editTeam1;
+  const otherSlot = team[1 - slot];
+  const excluded = [otherSlot, ...other].filter(Boolean);
+  return players.filter(p => !excluded.includes(p.id));
+}
+
+function renderEditModal() {
+  const overlay = document.getElementById('editOverlay');
+  const body = document.getElementById('editModalBody');
+  if (!editingMatchId) { overlay.classList.add('hidden'); return; }
+  overlay.classList.remove('hidden');
+
+  const makeSelects = (teamNum) => {
+    const team = teamNum === 1 ? editTeam1 : editTeam2;
+    let out = '';
+    for (let slot = 0; slot < 2; slot++) {
+      const avail = availableForEdit(teamNum, slot);
+      const opts = avail.map(p =>
+        `<option value="${p.id}" ${team[slot] === p.id ? 'selected' : ''}>${esc(p.name)} (${p.elo})</option>`
+      ).join('');
+      out += `<select class="team-select" onchange="setEditSlot(${teamNum}, ${slot}, this.value)">
+        <option value="">— Jugador ${slot + 1} —</option>
+        ${opts}
+      </select>`;
+    }
+    return out;
+  };
+
+  body.innerHTML = `
+    <h3>Editar Partida</h3>
+    <div class="edit-note">El ganador se determina por el puntaje mayor</div>
+    <div class="team-box">
+      <div class="team-header"><span>EQUIPO 1</span></div>
+      ${makeSelects(1)}
+    </div>
+    <div class="team-box">
+      <div class="team-header"><span>EQUIPO 2</span></div>
+      ${makeSelects(2)}
+    </div>
+    <div class="score-box">
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:11px">EQ.1</label>
+        <input type="number" id="editScoreT1" class="score-input" min="0" max="200" value="${editS1}">
+        <span class="score-vs">—</span>
+        <input type="number" id="editScoreT2" class="score-input" min="0" max="200" value="${editS2}">
+        <label style="font-size:11px">EQ.2</label>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="btn-edit-cancel" onclick="closeEditMatch()">Cancelar</button>
+      <button class="btn-edit-save" onclick="saveEditMatch()">✓ Guardar</button>
+    </div>
+  `;
+}
+
+function saveEditMatch() {
+  if (!editingMatchId) return;
+  const m = matches.find(x => x.id === editingMatchId);
+  if (!m) return;
+
+  captureEditScores();
+
+  if (editTeam1.includes(null) || editTeam2.includes(null)) {
+    alert('Completa los 4 jugadores');
+    return;
+  }
+  if (new Set([...editTeam1, ...editTeam2]).size !== 4) {
+    alert('No puede repetirse un jugador entre equipos');
+    return;
+  }
+  if (isNaN(editS1) || isNaN(editS2) || editS1 < 0 || editS2 < 0 || editS1 === editS2) {
+    alert('Ingresa puntajes válidos (no pueden ser iguales)');
+    return;
+  }
+
+  const t1Won = editS1 > editS2;
+  const winners = t1Won ? editTeam1 : editTeam2;
+  const losers = t1Won ? editTeam2 : editTeam1;
+  const winnerScore = Math.max(editS1, editS2);
+  const loserScore = Math.min(editS1, editS2);
+
+  const nameOf = id => players.find(p => p.id === id)?.name;
+  m.winnerNames = winners.map(nameOf);
+  m.loserNames = losers.map(nameOf);
+  m.winnerScore = winnerScore;
+  m.loserScore = loserScore;
+  // winChange / loseChange / winnerAvg / loserAvg will be recomputed
+
+  recalculateAll();
+  closeEditMatch();
+  save();
+  render();
+  autoSync();
+}
+
+// ═══════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════
 function render() {
@@ -853,6 +1116,11 @@ function renderHistory() {
     const lNames = m.loserNames || [];
     const winTag = m.winChange != null ? `<div class="match-change win">+${m.winChange} c/u</div>` : '';
     const loseTag = m.loseChange != null ? `<div class="match-change lose">${m.loseChange} c/u</div>` : '';
+    const actions = isAdmin() ? `
+      <div class="match-actions">
+        <button class="btn-match-edit" onclick="openEditMatch('${m.id}')">✎ Editar</button>
+        <button class="btn-match-delete" onclick="deleteMatch('${m.id}')">✕ Eliminar</button>
+      </div>` : '';
     return `
       <div class="match-card">
         <div class="match-meta">
@@ -869,6 +1137,7 @@ function renderHistory() {
             ${loseTag}
           </div>
         </div>
+        ${actions}
       </div>`;
   }).join('');
 }
