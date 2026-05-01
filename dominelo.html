@@ -347,6 +347,14 @@
     font-family: var(--font-display); outline: none; margin-bottom: 10px;
   }
   .login-box input::placeholder { color: var(--text-muted); }
+  .pass-wrap { position: relative; }
+  .pass-wrap input { padding-right: 40px; }
+  .pass-toggle {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: transparent; border: none; cursor: pointer; padding: 6px;
+    font-size: 16px; color: var(--text-dim); line-height: 1;
+  }
+  .pass-toggle:hover { color: var(--text); }
   .login-error {
     font-size: 12px; color: var(--red); font-family: var(--font-mono);
     min-height: 18px; margin-bottom: 8px;
@@ -409,7 +417,10 @@
     <h2>🁣 Dominelo</h2>
     <div class="login-sub">ACCESO PRIVADO</div>
     <input type="text" id="loginUser" placeholder="Usuario" autocomplete="off">
-    <input type="password" id="loginPass" placeholder="Contraseña">
+    <div class="pass-wrap">
+      <input type="password" id="loginPass" placeholder="Contraseña">
+      <button type="button" class="pass-toggle" id="btnTogglePass" aria-label="Mostrar contraseña">👁</button>
+    </div>
     <div class="login-error" id="loginError"></div>
     <button class="btn-gold" style="width:100%" id="btnLogin">Entrar</button>
   </div>
@@ -1409,6 +1420,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnLogin').addEventListener('click', doLogin);
   document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
+  });
+  document.getElementById('btnTogglePass').addEventListener('click', () => {
+    const inp = document.getElementById('loginPass');
+    const btn = document.getElementById('btnTogglePass');
+    const showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+    btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    inp.focus();
   });
 
   load();
