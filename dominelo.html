@@ -248,6 +248,31 @@
   .match-change.win { color: var(--green); }
   .match-change.lose { color: var(--red); }
 
+  /* Audit log */
+  .audit-log {
+    margin-bottom: 14px; padding: 10px 14px; border-radius: 10px;
+    background: var(--bg-card); border: 1px solid var(--border);
+  }
+  .audit-log summary {
+    cursor: pointer; font-size: 12px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .audit-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+  .audit-row {
+    display: grid; grid-template-columns: 90px 90px 1fr auto;
+    gap: 8px; align-items: center;
+    font-size: 11px; font-family: var(--font-mono);
+    padding: 4px 6px; border-radius: 6px;
+  }
+  .audit-row:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .audit-action.audit-add { color: var(--green); }
+  .audit-action.audit-edit { color: #d4a83a; }
+  .audit-action.audit-delete { color: var(--red); }
+  .audit-user { color: var(--text); font-weight: 600; }
+  .audit-summary { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .audit-date { color: var(--text-faint); }
+
   /* Player series panel */
   .player-card { cursor: pointer; }
   .series-panel {
@@ -481,6 +506,7 @@ const AUTH_USERS = {
   'jovan':    { pass: 'JovanDomino16', role: 'admin' },
   'kerwin':   { pass: 'KerwinDomino17', role: 'admin' },
   'danielmendez': { pass: 'DanielmendezDomino18', role: 'admin' },
+  'jhonurbina': { pass: 'JhonurbinaDomino19', role: 'admin' },
   'usuario':  { pass: 'Domino2026', role: 'viewer' }
 };
 const AUTH_KEY = 'domino-elo-auth';
@@ -535,15 +561,31 @@ const STORAGE_KEY = 'domino-elo-data';
 
 // ▼▼▼ PEGA AQUÍ TU URL DE APPS SCRIPT DESPLEGADA ▼▼▼
 //const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw-TOw1O5G89NolOaitzwouFCLtAgbnPOh7bInm7-4itJrI4qkSRs6jZGHaAasJebg/exec';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznivuz_bmFOkXC4oYrAz5KbtQETMSvG0gO4hOHSpk3MVjWyo6ffjMoL7HqkvchpUgROw/exec';
+//const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznivuz_bmFOkXC4oYrAz5KbtQETMSvG0gO4hOHSpk3MVjWyo6ffjMoL7HqkvchpUgROw/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2PkvImDkTc-WPl4iZvwWeIr0Z5XoODa9Fhs5FJaoN6nd4RE4e0ZVbSZ88XEMzzYEJpg/exec';
 // ▲▲▲ Ejemplo: 'https://script.google.com/macros/s/AKfyc.../exec' ▲▲▲
 
 let players = [];
 let matches = [];
+let auditLog = [];
 let team1 = [null, null];
 let team2 = [null, null];
 let currentView = 'ranking';
 let showFormula = false;
+
+function logAudit(action, m, extra) {
+  const entry = {
+    ts: new Date().toISOString(),
+    date: new Date().toLocaleString('es-CR'),
+    action,
+    user: getCurrentUser(),
+    matchId: m?.id || null,
+    summary: m ? `${(m.winnerNames || []).join(' & ')} ${m.winnerScore ?? ''}–${m.loserScore ?? ''} ${(m.loserNames || []).join(' & ')}` : ''
+  };
+  if (extra) Object.assign(entry, extra);
+  auditLog.unshift(entry);
+  return entry;
+}
 
 // ═══════════════════════════════════════
 // ELO MATH
@@ -573,7 +615,7 @@ function previewMatch(t1Avg, t2Avg) {
 // ═══════════════════════════════════════
 function save() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ players, matches }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ players, matches, auditLog }));
   } catch(e) { console.error('Save failed', e); }
 }
 
@@ -584,6 +626,7 @@ function load() {
       const data = JSON.parse(raw);
       players = data.players || [];
       matches = data.matches || [];
+      auditLog = data.auditLog || [];
     }
   } catch(e) { console.log('No saved data'); }
 }
@@ -667,11 +710,12 @@ function addPlayer() {
   const input = document.getElementById('newName');
   const name = input.value.trim();
   if (!name || players.find(p => p.name.toLowerCase() === name.toLowerCase())) return;
-  players.push({ id: Date.now().toString(), name, elo: INITIAL_ELO, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, efectividad: 0 });
+  const newPlayer = { id: Date.now().toString(), name, elo: INITIAL_ELO, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, efectividad: 0 };
+  players.push(newPlayer);
   input.value = '';
   save();
   render();
-  autoSync();
+  pushAction('addPlayer', { player: { id: newPlayer.id, name: newPlayer.name } });
 }
 
 function removePlayer(id) {
@@ -681,7 +725,7 @@ function removePlayer(id) {
   team2 = team2.map(v => v === id ? null : v);
   save();
   render();
-  autoSync();
+  pushAction('removePlayer', { playerId: id });
 }
 
 function recordMatch() {
@@ -728,7 +772,7 @@ function recordMatch() {
     return p;
   });
 
-  matches.unshift({
+  const newMatch = {
     id: Date.now().toString(),
     date: new Date().toLocaleDateString('es-CR'),
     winnerNames: winners.map(id => getPlayer(id)?.name),
@@ -736,13 +780,16 @@ function recordMatch() {
     winChange, loseChange, winnerAvg, loserAvg,
     winnerScore, loserScore,
     addedBy: getCurrentUser(),
-  });
+    addedAt: new Date().toLocaleString('es-CR'),
+  };
+  matches.unshift(newMatch);
+  const auditEntry = logAudit('add', newMatch);
 
   team1 = [null, null];
   team2 = [null, null];
   save();
   render();
-  autoSync();
+  pushAction('addMatch', { match: newMatch, audit: auditEntry });
 }
 
 function resetAll() {
@@ -819,11 +866,14 @@ function recalculateAll() {
 function deleteMatch(id) {
   if (!isAdmin()) return;
   if (!confirm('¿Eliminar esta partida?\nSe recalcularán los ELO y estadísticas de todos los jugadores.')) return;
+  const target = matches.find(m => m.id === id);
+  let auditEntry = null;
+  if (target) auditEntry = logAudit('delete', target);
   matches = matches.filter(m => m.id !== id);
   recalculateAll();
   save();
   render();
-  autoSync();
+  pushAction('deleteMatch', { matchId: id, audit: auditEntry });
 }
 
 // Edit state
@@ -956,13 +1006,16 @@ function saveEditMatch() {
   m.loserNames = losers.map(nameOf);
   m.winnerScore = winnerScore;
   m.loserScore = loserScore;
+  m.editedBy = getCurrentUser();
+  m.editedAt = new Date().toLocaleString('es-CR');
   // winChange / loseChange / winnerAvg / loserAvg will be recomputed
 
   recalculateAll();
+  const auditEntry = logAudit('edit', m);
   closeEditMatch();
   save();
   render();
-  autoSync();
+  pushAction('editMatch', { match: m, audit: auditEntry });
 }
 
 // ═══════════════════════════════════════
@@ -1129,15 +1182,32 @@ function renderTeamBox(teamNum) {
     </div>`;
 }
 
+function renderAuditLog() {
+  if (!auditLog || auditLog.length === 0) return '';
+  const labels = { add: '➕ Agregó', edit: '✎ Editó', delete: '🗑 Eliminó' };
+  const rows = auditLog.slice(0, 50).map(e => `
+    <div class="audit-row">
+      <span class="audit-action audit-${e.action}">${labels[e.action] || e.action}</span>
+      <span class="audit-user">${esc(e.user || '—')}</span>
+      <span class="audit-summary">${esc(e.summary || '')}</span>
+      <span class="audit-date">${esc(e.date || '')}</span>
+    </div>`).join('');
+  return `
+    <details class="audit-log" open>
+      <summary>Bitácora (${auditLog.length})</summary>
+      <div class="audit-list">${rows}</div>
+    </details>`;
+}
+
 function renderHistory() {
   const box = document.getElementById('historyContent');
 
   if (matches.length === 0) {
-    box.innerHTML = '<div class="empty">Aún no hay partidas registradas</div>';
+    box.innerHTML = renderAuditLog() + '<div class="empty">Aún no hay partidas registradas</div>';
     return;
   }
 
-  box.innerHTML = matches.map(m => {
+  box.innerHTML = renderAuditLog() + matches.map(m => {
     const wNames = m.winnerNames || [];
     const lNames = m.loserNames || [];
     const winTag = m.winChange != null ? `<div class="match-change win">+${m.winChange} c/u</div>` : '';
@@ -1148,12 +1218,14 @@ function renderHistory() {
         <button class="btn-match-delete" onclick="deleteMatch('${m.id}')">✕ Eliminar</button>
       </div>` : '';
     const addedByTag = m.addedBy ? ` · por ${esc(m.addedBy)}` : '';
+    const editedTag = m.editedBy ? `<div class="match-meta" style="opacity:.7;font-size:11px"><span>✎ editado por ${esc(m.editedBy)}${m.editedAt ? ' · ' + esc(m.editedAt) : ''}</span></div>` : '';
     return `
       <div class="match-card">
         <div class="match-meta">
           <span>${m.date}${addedByTag}</span>
           <span>${m.winnerScore != null ? m.winnerScore + '–' + m.loserScore + ' · ' : ''}${Math.round(m.winnerAvg)} vs ${Math.round(m.loserAvg)}</span>
         </div>
+        ${editedTag}
         <div class="match-teams">
           <div>
             <div class="match-winner">🏆 ${esc(wNames.join(' & '))}</div>
@@ -1209,6 +1281,22 @@ function hideLoader() {
   document.getElementById('loader').classList.add('hidden');
 }
 
+async function pushAction(action, payload) {
+  if (!APPS_SCRIPT_URL) return;
+  showLoader('Guardando...');
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, ...payload })
+    });
+  } catch (err) {
+    console.error('Push failed (' + action + ')', err);
+  } finally {
+    hideLoader();
+  }
+}
+
 async function autoSync() {
   if (!APPS_SCRIPT_URL) return;
   showLoader('Guardando...');
@@ -1216,7 +1304,7 @@ async function autoSync() {
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'sync', players, matches })
+      body: JSON.stringify({ action: 'sync', players, matches, auditLog })
     });
   } catch (err) {
     console.error('Auto-sync failed', err);
@@ -1234,6 +1322,8 @@ async function autoLoad() {
     if (json.success && json.players && json.players.length > 0) {
       players = json.players;
       matches = json.matches || [];
+      auditLog = json.auditLog || auditLog;
+      recalculateAll();
       save();
       render();
     }
@@ -1257,7 +1347,7 @@ async function syncToSheets() {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'sync', players, matches })
+      body: JSON.stringify({ action: 'sync', players, matches, auditLog })
     });
     const json = await res.json();
     if (json.success) {
@@ -1289,8 +1379,10 @@ async function syncFromSheets() {
     if (json.success) {
       players = json.players || [];
       matches = json.matches || [];
+      auditLog = json.auditLog || [];
       team1 = [null, null];
       team2 = [null, null];
+      recalculateAll();
       save();
       render();
       setSyncStatus(`Cargado: ${players.length} jugadores, ${matches.length} partidas`, 'ok');
