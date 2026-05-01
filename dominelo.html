@@ -467,6 +467,7 @@ const AUTH_USERS = {
 };
 const AUTH_KEY = 'domino-elo-auth';
 const ROLE_KEY = 'domino-elo-role';
+const USER_KEY = 'domino-elo-user';
 
 function checkAuth() {
   return localStorage.getItem(AUTH_KEY) === 'ok';
@@ -474,6 +475,10 @@ function checkAuth() {
 
 function getUserRole() {
   return localStorage.getItem(ROLE_KEY) || 'viewer';
+}
+
+function getCurrentUser() {
+  return localStorage.getItem(USER_KEY) || 'desconocido';
 }
 
 function isAdmin() {
@@ -487,6 +492,7 @@ function doLogin() {
   if (entry && entry.pass === pass) {
     localStorage.setItem(AUTH_KEY, 'ok');
     localStorage.setItem(ROLE_KEY, entry.role);
+    localStorage.setItem(USER_KEY, user);
     document.getElementById('loginOverlay').classList.add('hidden');
     render();
   } else {
@@ -497,6 +503,7 @@ function doLogin() {
 function doLogout() {
   localStorage.removeItem(AUTH_KEY);
   localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(USER_KEY);
   location.reload();
 }
 
@@ -710,6 +717,7 @@ function recordMatch() {
     loserNames: losers.map(id => getPlayer(id)?.name),
     winChange, loseChange, winnerAvg, loserAvg,
     winnerScore, loserScore,
+    addedBy: getCurrentUser(),
   });
 
   team1 = [null, null];
@@ -1121,10 +1129,11 @@ function renderHistory() {
         <button class="btn-match-edit" onclick="openEditMatch('${m.id}')">✎ Editar</button>
         <button class="btn-match-delete" onclick="deleteMatch('${m.id}')">✕ Eliminar</button>
       </div>` : '';
+    const addedByTag = m.addedBy ? ` · por ${esc(m.addedBy)}` : '';
     return `
       <div class="match-card">
         <div class="match-meta">
-          <span>${m.date}</span>
+          <span>${m.date}${addedByTag}</span>
           <span>${m.winnerScore != null ? m.winnerScore + '–' + m.loserScore + ' · ' : ''}${Math.round(m.winnerAvg)} vs ${Math.round(m.loserAvg)}</span>
         </div>
         <div class="match-teams">
